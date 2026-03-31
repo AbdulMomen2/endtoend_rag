@@ -1,0 +1,7 @@
+# ============================================================
+# Optional: Cross-encoder reranking (requires PyTorch ~2GB)
+# Only install locally if you have GPU or don't mind the size.
+# Enable with: use_reranker=True in inference/pipeline.py
+# ============================================================
+-r requirements.txt
+sentence-transformers>=3.0.0

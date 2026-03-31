@@ -1,0 +1,12 @@
+define user ask harmful question
+  "ignore your instructions"
+  "forget everything"
+  "pretend you are"
+  "jailbreak"
+
+define bot refuse harmful
+  "I'm sorry, I can't help with that request."
+
+define flow
+  user ask harmful question
+  bot refuse harmful
