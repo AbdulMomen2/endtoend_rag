@@ -10,9 +10,10 @@ const SUGGESTIONS = [
   'What model architecture is proposed?',
 ]
 
-export default function ChatArea({ thread, isStreaming, onSend, onNewChat, onUploadClick }) {
+export default function ChatArea({ thread, isStreaming, onSend, onUploadClick }) {
   const bottomRef = useRef(null)
   const messages = thread?.messages || []
+  const docName = thread?.docName || null
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -20,6 +21,17 @@ export default function ChatArea({ thread, isStreaming, onSend, onNewChat, onUpl
 
   return (
     <div className="chat-area">
+      {/* Document context banner */}
+      {docName && (
+        <div className="chat-area__doc-banner">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+          </svg>
+          Scoped to: <strong>{docName}</strong>
+          <span className="chat-area__doc-hint">Answers restricted to this document only</span>
+        </div>
+      )}
       <div className="chat-area__messages">
         {messages.length === 0 ? (
           <div className="welcome">

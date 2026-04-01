@@ -1,11 +1,17 @@
 const BASE = '/api/v1'
 
-export async function streamChat({ query, sessionId, topK = 5, onSources, onToken, onReplace, onDone, onError }) {
+export async function streamChat({ query, sessionId, topK = 5, docId = null, onSources, onToken, onReplace, onDone, onError }) {
   try {
     const res = await fetch(`${BASE}/chat/stream`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query, session_id: sessionId, top_k: topK, use_cache: false })
+      body: JSON.stringify({
+        query,
+        session_id: sessionId,
+        top_k: topK,
+        doc_id: docId,
+        use_cache: false
+      })
     })
     if (!res.ok) {
       const err = await res.json().catch(() => ({ detail: 'Request failed' }))
@@ -57,6 +63,29 @@ export async function uploadDocument(file, onProgress) {
     }
     xhr.onerror = () => reject(new Error('Network error'))
     xhr.send(form)
+  })
+}
+
+export async function pollJobStatus(jobId, onStatus, intervalMs = 1500, timeoutMs = 120000) {
+  const start = Date.now()
+  return new Promise((resolve, reject) => {
+    const check = async () => {
+      if (Date.now() - start > timeoutMs) {
+        reject(new Error('Ingestion timed out'))
+        return
+      }
+      try {
+        const res = await fetch(`${BASE}/ingest/jobs/${jobId}`)
+        const job = await res.json()
+        onStatus?.(job)
+        if (job.status === 'done') { resolve(job); return }
+        if (job.status === 'failed') { reject(new Error(job.error || 'Ingestion failed')); return }
+        setTimeout(check, intervalMs)
+      } catch (e) {
+        reject(e)
+      }
+    }
+    check()
   })
 }
 

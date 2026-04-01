@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback } from 'react'
-import { uploadDocument } from '../api/client.js'
+import { uploadDocument, pollJobStatus } from '../api/client.js'
 
 export default function UploadModal({ onClose, onSuccess }) {
   const [file, setFile] = useState(null)
@@ -40,9 +40,19 @@ export default function UploadModal({ onClose, onSuccess }) {
     setProgress(0)
     setError('')
     try {
-      const res = await uploadDocument(file, setProgress)
-      setResult(res)
-      onSuccess?.(res)
+      // Step 1: upload file and queue job
+      const queued = await uploadDocument(file, setProgress)
+      setProgress(100)
+
+      // Step 2: poll until done
+      const done = await pollJobStatus(
+        queued.job_id,
+        (job) => {
+          if (job.status === 'processing') setProgress(100)
+        }
+      )
+      setResult({ ...done.result, filename: queued.filename, size_kb: queued.size_kb })
+      onSuccess?.(done.result)
     } catch (e) {
       setError(e.message || 'Upload failed.')
     } finally {
@@ -121,7 +131,7 @@ export default function UploadModal({ onClose, onSuccess }) {
             <div className="upload-progress__bar">
               <div className="upload-progress__fill" style={{ width: `${progress}%` }} />
             </div>
-            <p>{progress < 100 ? `Uploading… ${progress}%` : 'Processing document…'}</p>
+            <p>{progress < 100 ? `Uploading… ${progress}%` : 'Processing document in background…'}</p>
           </div>
         )}
 

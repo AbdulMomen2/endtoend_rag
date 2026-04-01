@@ -10,16 +10,12 @@ const THREADS_KEY = 'rag_threads'
 function loadThreads() {
   try { return JSON.parse(localStorage.getItem(THREADS_KEY)) || [] } catch { return [] }
 }
-
-function saveThreads(threads) {
-  localStorage.setItem(THREADS_KEY, JSON.stringify(threads))
-}
+function saveThreads(t) { localStorage.setItem(THREADS_KEY, JSON.stringify(t)) }
 
 export default function App() {
   const [threads, setThreads] = useState(loadThreads)
   const [activeId, setActiveId] = useState(() => {
-    const t = loadThreads()
-    return t.length > 0 ? t[0].id : null
+    const t = loadThreads(); return t.length > 0 ? t[0].id : null
   })
   const [isStreaming, setIsStreaming] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(true)
@@ -29,14 +25,21 @@ export default function App() {
 
   useEffect(() => { saveThreads(threads) }, [threads])
 
-  const createThread = useCallback(() => {
+  const createThread = useCallback((docId = null, docName = null) => {
     const id = uuidv4()
-    const thread = { id, title: 'New conversation', messages: [], createdAt: Date.now() }
+    const thread = {
+      id,
+      title: docName ? `Chat: ${docName}` : 'New conversation',
+      messages: [],
+      createdAt: Date.now(),
+      docId,       // null = search all documents
+      docName,     // display name
+    }
     setThreads(prev => [thread, ...prev])
     setActiveId(id)
+    return id
   }, [])
 
-  // Create initial thread if none exist
   useEffect(() => {
     if (threads.length === 0) createThread()
   }, [])
@@ -57,17 +60,14 @@ export default function App() {
 
   const handleSend = useCallback(async (query) => {
     if (isStreaming || !activeId) return
-
     const msgId = uuidv4()
+    const thread = threads.find(t => t.id === activeId)
 
-    // Add user message
     updateThread(activeId, t => ({
       ...t,
-      title: t.messages.length === 0 ? query.slice(0, 40) : t.title,
+      title: t.messages.length === 0 && !t.docName ? query.slice(0, 40) : t.title,
       messages: [...t.messages, { id: uuidv4(), role: 'user', content: query }]
     }))
-
-    // Add assistant placeholder
     updateThread(activeId, t => ({
       ...t,
       messages: [...t.messages, { id: msgId, role: 'assistant', content: '', streaming: true, sources: [] }]
@@ -79,6 +79,7 @@ export default function App() {
       query,
       sessionId: activeId,
       topK: 5,
+      docId: thread?.docId || null,
       onSources: (sources, conversational) => {
         updateThread(activeId, t => ({
           ...t,
@@ -88,40 +89,37 @@ export default function App() {
       onToken: (token) => {
         updateThread(activeId, t => ({
           ...t,
-          messages: t.messages.map(m =>
-            m.id === msgId ? { ...m, content: m.content + token } : m
-          )
+          messages: t.messages.map(m => m.id === msgId ? { ...m, content: m.content + token } : m)
         }))
       },
       onReplace: (content) => {
-        // Fallback triggered — replace all streamed tokens with clean message
         updateThread(activeId, t => ({
           ...t,
-          messages: t.messages.map(m =>
-            m.id === msgId ? { ...m, content, fallback: true } : m
-          )
+          messages: t.messages.map(m => m.id === msgId ? { ...m, content, fallback: true } : m)
         }))
       },
       onDone: (latency_ms, fallback) => {
         updateThread(activeId, t => ({
           ...t,
-          messages: t.messages.map(m =>
-            m.id === msgId ? { ...m, streaming: false, latency_ms, fallback } : m
-          )
+          messages: t.messages.map(m => m.id === msgId ? { ...m, streaming: false, latency_ms, fallback } : m)
         }))
         setIsStreaming(false)
       },
       onError: (detail) => {
         updateThread(activeId, t => ({
           ...t,
-          messages: t.messages.map(m =>
-            m.id === msgId ? { ...m, content: `⚠️ ${detail}`, streaming: false } : m
-          )
+          messages: t.messages.map(m => m.id === msgId ? { ...m, content: `⚠️ ${detail}`, streaming: false } : m)
         }))
         setIsStreaming(false)
       }
     })
-  }, [isStreaming, activeId, updateThread])
+  }, [isStreaming, activeId, updateThread, threads])
+
+  // Called after successful upload — create a new thread bound to the document
+  const handleUploadSuccess = useCallback((result) => {
+    setShowUpload(false)
+    createThread(result.doc_id, result.filename)
+  }, [createThread])
 
   return (
     <div className="app" data-sidebar={sidebarOpen}>
@@ -129,7 +127,7 @@ export default function App() {
         threads={threads}
         activeId={activeId}
         onSelect={setActiveId}
-        onCreate={createThread}
+        onCreate={() => createThread()}
         onDelete={deleteThread}
         isOpen={sidebarOpen}
         onToggle={() => setSidebarOpen(o => !o)}
@@ -139,13 +137,12 @@ export default function App() {
         thread={activeThread}
         isStreaming={isStreaming}
         onSend={handleSend}
-        onNewChat={createThread}
         onUploadClick={() => setShowUpload(true)}
       />
       {showUpload && (
         <UploadModal
           onClose={() => setShowUpload(false)}
-          onSuccess={() => {}}
+          onSuccess={handleUploadSuccess}
         />
       )}
     </div>
