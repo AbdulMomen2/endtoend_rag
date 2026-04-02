@@ -75,10 +75,14 @@ function Sources({ sources }) {
             <div key={i} className="source">
               <div className="source__header">
                 <span className="source__page">Page {src.page}</span>
-                <span className="source__score">relevance: {src.similarity_score}</span>
+                <span className="source__score">
+                  relevance: {typeof src.similarity_score === 'number'
+                    ? src.similarity_score.toFixed(4)
+                    : src.similarity_score ?? 'N/A'}
+                </span>
               </div>
               <p className="source__text">{src.text_snippet}</p>
-              
+
             </div>
           ))}
         </div>

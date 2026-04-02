@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # ==========================================
   # Frontend — React + nginx
@@ -10,10 +8,9 @@ services:
       dockerfile: Dockerfile
     container_name: rag_frontend
     ports:
-      - "80:80"
+      - "3001:80"
     depends_on:
-      rag_api:
-        condition: service_healthy
+      - rag_api
     restart: unless-stopped
     networks:
       - rag_network
@@ -31,23 +28,20 @@ services:
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - NVIDIA_API_KEY=${NVIDIA_API_KEY:-}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
       - FAISS_INDEX_PATH=/app/vector_db/faiss_index
-      - CHUNK_SIZE=512
-      - CHUNK_OVERLAP=50
+      - CHUNK_SIZE=1024
+      - CHUNK_OVERLAP=150
       - EMBEDDING_MODEL=text-embedding-3-small
       - REDIS_ENABLED=true
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      - EXTRACT_IMAGES=false
     volumes:
-      - vector_db:/app/vector_db   # Writable — upload rebuilds index
+      - ./vector_db:/app/vector_db   # Mount local index (writable for uploads)
       - ./models:/app/models
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 60s
     depends_on:
       redis:
         condition: service_healthy
@@ -82,5 +76,4 @@ networks:
     driver: bridge
 
 volumes:
-  vector_db:
   redis_data:

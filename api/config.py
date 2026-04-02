@@ -15,8 +15,9 @@ class APIConfig(BaseSettings):
     # Security
     RATE_LIMIT: str = "30/minute"
     MAX_QUERY_LENGTH: int = 500
-    MIN_QUERY_LENGTH: int = 3
-    ALLOWED_ORIGINS: list = ["*"]  # TODO: Restrict in production
+    MIN_QUERY_LENGTH: int = 1
+    ALLOWED_ORIGINS: list = ["*"]
+    API_KEY: str = ""  # Set to require X-API-Key header on all endpoints
     
     # Cache
     CACHE_ENABLED: bool = True

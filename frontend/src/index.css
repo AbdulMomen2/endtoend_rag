@@ -789,3 +789,85 @@ body {
   font-size: 11px;
   color: var(--text-3);
 }
+
+/* ===== Chat input meta row ===== */
+.chat-area__input-row { margin-bottom: 8px; }
+.chat-area__input-meta {
+  display: flex; align-items: center; gap: 12px;
+  max-width: 760px; margin: 0 auto;
+}
+.chat-area__disclaimer {
+  flex: 1; text-align: right;
+  font-size: 11px; color: var(--text-3);
+}
+
+/* ===== Model Selector ===== */
+.model-selector { position: relative; }
+
+.model-selector__trigger {
+  display: flex; align-items: center; gap: 5px;
+  padding: 5px 10px;
+  background: var(--bg-2);
+  border: 1px solid var(--border-2);
+  border-radius: 8px;
+  color: var(--text-2);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: var(--font);
+  white-space: nowrap;
+}
+.model-selector__trigger:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--text);
+}
+.model-selector__trigger:disabled { opacity: 0.4; cursor: not-allowed; }
+.model-selector__trigger svg { width: 12px; height: 12px; }
+.model-selector__name { max-width: 140px; overflow: hidden; text-overflow: ellipsis; }
+
+.model-selector__dropdown {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  background: var(--bg-2);
+  border: 1px solid var(--border-2);
+  border-radius: 10px;
+  min-width: 220px;
+  z-index: 100;
+  overflow: hidden;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  animation: fadeUp 0.12s ease;
+}
+
+.model-selector__group { padding: 6px 0; }
+.model-selector__group + .model-selector__group { border-top: 1px solid var(--border); }
+
+.model-selector__group-label {
+  padding: 4px 12px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-3);
+}
+
+.model-selector__option {
+  display: flex; align-items: center; justify-content: space-between;
+  width: 100%; padding: 7px 12px;
+  background: none; border: none;
+  color: var(--text-2); font-size: 13px;
+  cursor: pointer; text-align: left;
+  font-family: var(--font);
+  transition: background 0.1s;
+}
+.model-selector__option:hover { background: var(--bg-3); color: var(--text); }
+.model-selector__option--active { color: var(--accent); }
+
+.model-selector__free {
+  font-size: 9px; font-weight: 600;
+  background: rgba(76,175,80,0.15);
+  color: #81c784;
+  border: 1px solid rgba(76,175,80,0.25);
+  padding: 1px 5px; border-radius: 4px;
+  text-transform: uppercase;
+}

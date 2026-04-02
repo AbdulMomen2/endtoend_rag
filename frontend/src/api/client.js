@@ -1,6 +1,6 @@
 const BASE = '/api/v1'
 
-export async function streamChat({ query, sessionId, topK = 5, docId = null, onSources, onToken, onReplace, onDone, onError }) {
+export async function streamChat({ query, sessionId, topK = 5, docId = null, provider = 'openai', model = 'gpt-4o-mini', onSources, onToken, onReplace, onDone, onError }) {
   try {
     const res = await fetch(`${BASE}/chat/stream`, {
       method: 'POST',
@@ -10,12 +10,18 @@ export async function streamChat({ query, sessionId, topK = 5, docId = null, onS
         session_id: sessionId,
         top_k: topK,
         doc_id: docId,
+        provider,
+        model,
         use_cache: false
       })
     })
     if (!res.ok) {
       const err = await res.json().catch(() => ({ detail: 'Request failed' }))
-      onError?.(err.detail || 'Request failed')
+      // Pydantic returns detail as an array of error objects — flatten to string
+      const detail = Array.isArray(err.detail)
+        ? err.detail.map(e => e.msg || JSON.stringify(e)).join(', ')
+        : (err.detail || 'Request failed')
+      onError?.(detail)
       return
     }
     const reader = res.body.getReader()
@@ -35,12 +41,12 @@ export async function streamChat({ query, sessionId, topK = 5, docId = null, onS
           else if (e.type === 'token') onToken?.(e.content)
           else if (e.type === 'replace') onReplace?.(e.content)
           else if (e.type === 'done') onDone?.(e.latency_ms, e.fallback)
-          else if (e.type === 'error') onError?.(e.detail)
+          else if (e.type === 'error') onError?.(typeof e.detail === 'string' ? e.detail : JSON.stringify(e.detail))
         } catch {}
       }
     }
   } catch (err) {
-    onError?.(err.message || 'Network error')
+    onError?.(err?.message || String(err) || 'Network error')
   }
 }
 

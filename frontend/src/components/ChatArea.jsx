@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import Message from './Message.jsx'
 import InputBar from './InputBar.jsx'
+import ModelSelector from './ModelSelector.jsx'
 
 const SUGGESTIONS = [
   'What is this document about?',
@@ -10,10 +11,12 @@ const SUGGESTIONS = [
   'What model architecture is proposed?',
 ]
 
-export default function ChatArea({ thread, isStreaming, onSend, onUploadClick }) {
+export default function ChatArea({ thread, isStreaming, onSend, onUploadClick, onModelChange }) {
   const bottomRef = useRef(null)
   const messages = thread?.messages || []
   const docName = thread?.docName || null
+  const provider = thread?.provider || 'openai'
+  const model = thread?.model || 'gpt-4o-mini'
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -65,10 +68,20 @@ export default function ChatArea({ thread, isStreaming, onSend, onUploadClick })
       </div>
 
       <div className="chat-area__input">
-        <InputBar onSend={onSend} disabled={isStreaming} onUploadClick={onUploadClick} />
-        <p className="chat-area__disclaimer">
-          Answers are grounded strictly in the document · Citations shown as (Page N) · 🎙 Voice input supported
-        </p>
+        <div className="chat-area__input-row">
+          <InputBar onSend={onSend} disabled={isStreaming} onUploadClick={onUploadClick} />
+        </div>
+        <div className="chat-area__input-meta">
+          <ModelSelector
+            provider={provider}
+            model={model}
+            onChange={onModelChange}
+            disabled={isStreaming}
+          />
+          <p className="chat-area__disclaimer">
+            Grounded in document · Citations (Page N) · 🎙 Voice supported
+          </p>
+        </div>
       </div>
     </div>
   )

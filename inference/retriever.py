@@ -81,19 +81,21 @@ class HybridRetriever:
             logger.info("Cross-encoder disabled (use_reranker=False). Using RRF only.")
 
     @track_latency("Hybrid_Retrieval")
-    def retrieve_with_guardrails(self, query: str, top_k: int = 3) -> Tuple[List[Dict], bool]:
+    def retrieve_with_guardrails(self, query: str, top_k: int = 3, doc_id: str = None) -> Tuple[List[Dict], bool]:
         """
-        1. Dense retrieval (FAISS) — top fetch_k
-        2. Sparse retrieval (BM25) — top fetch_k
-        3. Deduplicate by content hash
-        4. Fuse with RRF
-        5. Rerank top candidates with cross-encoder
-        6. Return top_k with guardrail check
+        Hybrid retrieval with optional doc_id filter.
+        If doc_id is provided, only chunks from that document are returned.
         """
-        fetch_k = max(top_k * 4, 12)  # Wider candidate pool = better recall
+        fetch_k = max(top_k * 4, 12)
 
         # 1. Dense
         dense_results = self.vector_store.similarity_search_with_score(query, k=fetch_k)
+
+        # Filter by doc_id if specified
+        if doc_id:
+            dense_results = [(doc, score) for doc, score in dense_results
+                             if doc.metadata.get("doc_id") == doc_id]
+
         dense_docs = {str(i): doc for i, (doc, _) in enumerate(dense_results)}
         dense_ranking = list(dense_docs.keys())
 
@@ -103,37 +105,33 @@ class HybridRetriever:
         if self.bm25 and self.bm25_docs:
             tokens = _tokenize(query)
             bm25_scores = self.bm25.get_scores(tokens)
-            bm25_ranked_idx = sorted(
-                range(len(bm25_scores)),
-                key=lambda i: bm25_scores[i],
-                reverse=True
-            )[:fetch_k]
-            for idx in bm25_ranked_idx:
-                doc_id = f"bm25_{idx}"
-                bm25_id_map[doc_id] = self.bm25_docs[idx]
-                bm25_ranking.append(doc_id)
+            # Filter BM25 docs by doc_id if specified
+            candidates = [
+                (i, score) for i, score in enumerate(bm25_scores)
+                if not doc_id or self.bm25_docs[i].metadata.get("doc_id") == doc_id
+            ]
+            candidates.sort(key=lambda x: x[1], reverse=True)
+            for idx, _ in candidates[:fetch_k]:
+                did = f"bm25_{idx}"
+                bm25_id_map[did] = self.bm25_docs[idx]
+                bm25_ranking.append(did)
 
-        # 3. Deduplicate by content hash before fusion
+        # 3. Deduplicate
         seen_hashes = set()
         all_candidates: Dict[str, any] = {}
-        for doc_id, doc in {**dense_docs, **bm25_id_map}.items():
-            content_hash = hash(doc.page_content)
-            if content_hash not in seen_hashes:
-                seen_hashes.add(content_hash)
-                all_candidates[doc_id] = doc
+        for did, doc in {**dense_docs, **bm25_id_map}.items():
+            h = hash(doc.page_content)
+            if h not in seen_hashes:
+                seen_hashes.add(h)
+                all_candidates[did] = doc
 
-        # 4. RRF fusion on deduplicated set
+        # 4. RRF fusion
         all_rankings = [dense_ranking]
         if bm25_ranking:
             all_rankings.append(bm25_ranking)
         rrf_scores = _rrf(all_rankings)
 
-        sorted_ids = sorted(
-            all_candidates.keys(),
-            key=lambda d: rrf_scores.get(d, 0),
-            reverse=True
-        )
-        # Only pass top_k candidates to cross-encoder to minimize CPU latency
+        sorted_ids = sorted(all_candidates.keys(), key=lambda d: rrf_scores.get(d, 0), reverse=True)
         top_candidates = [(all_candidates[d], rrf_scores.get(d, 0)) for d in sorted_ids[:top_k]]
 
         # 5. Cross-encoder reranking
@@ -143,10 +141,9 @@ class HybridRetriever:
             reranked = sorted(zip(top_candidates, ce_scores), key=lambda x: x[1], reverse=True)
             top_candidates = [(doc, float(ce_score)) for (doc, _), ce_score in reranked]
 
-        # 6. Format and guardrail
+        # 6. Format
         formatted_sources = []
         highest_score = -999.0
-
         for doc, score in top_candidates:
             norm_score = float(score)
             if norm_score > highest_score:
@@ -155,18 +152,20 @@ class HybridRetriever:
                 "text": doc.page_content,
                 "page": doc.metadata.get("page", "N/A"),
                 "chunk_id": doc.metadata.get("chunk_id", "N/A"),
+                "doc_id": doc.metadata.get("doc_id", ""),
+                "filename": doc.metadata.get("filename", ""),
                 "similarity_score": round(norm_score, 4)
             })
 
-        logger.info(f"Hybrid retrieval: {len(formatted_sources)} chunks, top score={highest_score:.4f}")
+        logger.info(f"Retrieval: {len(formatted_sources)} chunks, top={highest_score:.4f}"
+                    + (f", filtered to doc_id={doc_id}" if doc_id else ""))
 
         short_circuit = (
             self.reranker is not None
             and len(formatted_sources) > 0
             and highest_score < self.similarity_threshold
         )
-
         if short_circuit:
-            logger.warning(f"Low relevance after reranking ({highest_score:.4f}). Short-circuiting.")
+            logger.warning(f"Low relevance ({highest_score:.4f}). Short-circuiting.")
 
         return formatted_sources, short_circuit

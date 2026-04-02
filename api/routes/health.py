@@ -1,10 +1,12 @@
 """Health check and metrics endpoints."""
 import time
 from fastapi import APIRouter, Depends
+from fastapi.responses import Response
 from api.models.responses import HealthResponse, MetricsResponse
 from api.services.chatbot import chatbot_service
 from api.services.cache import cache_service
 from api.dependencies import get_cache_service
+from core.metrics import generate_latest, CONTENT_TYPE_LATEST, METRICS_ENABLED
 
 router = APIRouter(tags=["System"])
 
@@ -53,8 +55,11 @@ async def readiness_check():
 
 @router.get("/live")
 async def liveness_check():
-    """
-    Kubernetes liveness probe.
-    Returns 200 if service is alive (even if not ready).
-    """
+    """Kubernetes liveness probe."""
     return {"alive": True}
+
+
+@router.get("/metrics/prometheus", include_in_schema=False)
+async def prometheus_metrics():
+    """Prometheus scrape endpoint."""
+    return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)

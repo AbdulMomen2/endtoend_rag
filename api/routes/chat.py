@@ -13,12 +13,12 @@ from api.models.requests import ChatRequest
 from api.models.responses import ChatResponse, SourceNode
 from api.services.chatbot import ChatbotService
 from api.services.cache import CacheService
-from api.dependencies import get_chatbot_service, get_cache_service
+from api.dependencies import get_chatbot_service, get_cache_service, verify_api_key
 from api.config import api_config
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/api/v1", tags=["Chat"])
 limiter = Limiter(key_func=get_remote_address)
+router = APIRouter(prefix="/api/v1", tags=["Chat"], dependencies=[Depends(verify_api_key)])
 
 FALLBACK = "This information is not present in the provided document."
 
@@ -62,6 +62,13 @@ def _is_conversational(query: str) -> str | None:
     return None
 
 
+@router.get("/models")
+async def list_models():
+    """Return available LLM providers and models."""
+    from inference.generator import AVAILABLE_MODELS
+    return {"models": AVAILABLE_MODELS}
+
+
 @router.post("/chat", response_model=ChatResponse)
 @limiter.limit(api_config.RATE_LIMIT)
 async def chat_endpoint(
@@ -100,7 +107,8 @@ async def chat_endpoint(
             bot.chat,
             session_id=chat_request.session_id,
             user_query=chat_request.query,
-            top_k=chat_request.top_k
+            top_k=chat_request.top_k,
+            doc_id=chat_request.doc_id
         )
         
         # Format sources
@@ -205,8 +213,19 @@ async def chat_stream_endpoint(
             sources, short_circuit = await asyncio.to_thread(
                 bot.pipeline.retriever.retrieve_with_guardrails,
                 chat_request.query,
-                chat_request.top_k
+                chat_request.top_k,
+                chat_request.doc_id
             )
+
+            # Swap model if requested
+            if chat_request.provider and chat_request.model:
+                gen = bot.pipeline.generator
+                if gen.provider != chat_request.provider or gen.model != chat_request.model:
+                    from inference.generator import GroundedGenerator
+                    bot.pipeline.generator = GroundedGenerator(
+                        provider=chat_request.provider,
+                        model=chat_request.model
+                    )
 
             formatted_sources = [
                 {

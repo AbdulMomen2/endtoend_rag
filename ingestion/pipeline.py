@@ -1,4 +1,6 @@
 from pathlib import Path
+from typing import Optional
+import uuid
 import logging
 from dotenv import load_dotenv
 from ingestion.parsers import ParserFactory
@@ -9,41 +11,39 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 load_dotenv()
 
-class IngestionPipeline:
-    """
-    Orchestrates the end-to-end ingestion process:
-    1. Read Document
-    2. Parse Text & Metadata
-    3. Split into Chunks
-    4. Generate Embeddings & Store in FAISS
-    """
 
+class IngestionPipeline:
     def __init__(self):
         self.chunker = DocumentChunker()
         self.vector_manager = VectorStoreManager()
 
-    def run(self, file_path_str: str) -> bool:
+    def run(self, file_path_str: str, doc_id: Optional[str] = None) -> bool:
         file_path = Path(file_path_str)
-        
         if not file_path.exists():
             logger.error(f"File not found: {file_path_str}")
             return False
 
-        try:
-            logger.info(f"--- Starting Ingestion Pipeline for: {file_path.name} ---")
+        doc_id = doc_id or str(uuid.uuid4())
 
+        try:
+            logger.info(f"--- Starting Ingestion: {file_path.name} (doc_id={doc_id}) ---")
             parser = ParserFactory.get_parser(file_path)
             raw_documents = parser.parse(file_path)
-            chunks = self.chunker.split(raw_documents)
-            self.vector_manager.build_and_save(chunks)
-            logger.info("--- Ingestion Pipeline Completed Successfully ---")
+            # Use smaller chunks for DOCX, larger for PDF
+            chunker = DocumentChunker.for_docx() if file_path.suffix.lower() == ".docx" else DocumentChunker()
+            chunks = chunker.split(raw_documents)
+            self.vector_manager.build_and_save(chunks, doc_id=doc_id, filename=file_path.name)
+            logger.info("--- Ingestion Completed Successfully ---")
             return True
-            
         except Exception as e:
-            logger.error(f"Ingestion Pipeline failed: {str(e)}")
+            logger.error(f"Ingestion failed: {str(e)}")
             return False
 
-if __name__ == "__main__":
+    def list_documents(self):
+        return self.vector_manager.list_documents()
 
+
+if __name__ == "__main__":
     pipeline = IngestionPipeline()
     pipeline.run("CIFFND__Cross_Modal_Attention_Fusion_of_Caption_and_Images_for_AI_Generated_Content_Detection.pdf")
+    print("Documents:", pipeline.list_documents())

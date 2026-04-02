@@ -24,6 +24,14 @@ faiss-cpu>=1.9.0
 # Hybrid retrieval (BM25 only — no torch dependency)
 rank-bm25>=0.2.2
 
+# Multi-model support
+langchain-google-genai>=2.0.0   # Gemini
+langchain-groq>=0.2.0           # Groq (free tier available)
+
+# Multimodal / spreadsheet support
+pandas>=2.0.0
+openpyxl>=3.1.0
+
 # OpenAI client
 openai>=2.0.0
 
@@ -36,3 +44,4 @@ uvicorn[standard]>=0.30.0
 slowapi>=0.1.9
 python-multipart>=0.0.9
 redis>=5.0.0
+prometheus-client>=0.20.0

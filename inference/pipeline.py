@@ -1,20 +1,54 @@
 import time
+import logging
 from typing import Dict, Any
 from inference.memory import SessionMemoryManager
 from inference.retriever import HybridRetriever
 from inference.generator import GroundedGenerator
 from core.logger import analytics_logger
+from core.metrics import query_counter, latency_histogram, fallback_counter
 from dotenv import load_dotenv
 load_dotenv()
 
+logger = logging.getLogger(__name__)
+from langchain_openai import ChatOpenAI
+from langchain_core.prompts import ChatPromptTemplate
+
+_reformulate_llm = ChatOpenAI(model_name="gpt-4o-mini", temperature=0.0)
+_reformulate_prompt = ChatPromptTemplate.from_messages([
+    ("system", """You are a query reformulation assistant.
+Given a conversation history and a follow-up question, rewrite the question as a 
+fully self-contained, standalone query that can be understood without the history.
+- Resolve pronouns (it, they, this, that) to their referents
+- Expand abbreviations if context makes them clear
+- Keep it concise — one sentence
+- If the question is already standalone, return it unchanged
+- Return ONLY the reformulated query, nothing else."""),
+    ("human", "History:\n{history}\n\nFollow-up: {query}")
+])
+_reformulate_chain = _reformulate_prompt | _reformulate_llm
+
+
+def _reformulate_query(query: str, history: str) -> str:
+    """Rewrite query to be standalone using conversation history."""
+    if history == "No prior conversation." or len(query.split()) > 15:
+        return query  # Already standalone or long enough
+    try:
+        result = _reformulate_chain.invoke({"history": history, "query": query})
+        reformulated = result.content.strip()
+        if reformulated and len(reformulated) > 3:
+            return reformulated
+    except Exception:
+        pass
+    return query
+
 class ChatbotPipeline:
-    def __init__(self):
+    def __init__(self, provider: str = "openai", model: str = "gpt-4o-mini"):
         self.memory = SessionMemoryManager()
         self.retriever = HybridRetriever(similarity_threshold=-8.0, use_reranker=False)
-        self.generator = GroundedGenerator()
+        self.generator = GroundedGenerator(provider=provider, model=model)
         self.exact_fallback = "This information is not present in the provided document."
 
-    def chat(self, session_id: str, user_query: str, top_k: int = 5) -> Dict[str, Any]:
+    def chat(self, session_id: str, user_query: str, top_k: int = 5, doc_id: str = None) -> Dict[str, Any]:
         start_time = time.time()
         metrics = {"fallback_triggered": False}
         
@@ -24,12 +58,16 @@ class ChatbotPipeline:
             
             # 2. Add user query to memory
             self.memory.add_message(session_id, "user", user_query)
-            
-            # (Optional Bonus: Here we would add a lightweight LLM call to Reformulate the Query 
-            # based on history, e.g., resolving "it" to "PTO policy". For brevity, omitted here.)
 
-            # 3. Retrieve & Evaluate (The Guardrail)
-            sources, short_circuit = self.retriever.retrieve_with_guardrails(user_query, top_k=top_k)
+            # 3. Reformulate query for better retrieval in multi-turn context
+            retrieval_query = _reformulate_query(user_query, history)
+            if retrieval_query != user_query:
+                logger.info(f"Query reformulated: '{user_query}' → '{retrieval_query}'")
+
+            # 4. Retrieve & Evaluate
+            sources, short_circuit = self.retriever.retrieve_with_guardrails(
+                retrieval_query, top_k=top_k, doc_id=doc_id
+            )
             
             # 4. Generate or Short-Circuit
             if short_circuit or not sources:
@@ -45,9 +83,15 @@ class ChatbotPipeline:
 
             # 6. Save AI response to memory
             self.memory.add_message(session_id, "assistant", answer)
-            
+
             metrics["latency_ms"] = round((time.time() - start_time) * 1000, 2)
-            
+
+            # Prometheus metrics
+            query_counter.labels(session_type="fallback" if metrics["fallback_triggered"] else "rag").inc()
+            latency_histogram.observe(metrics["latency_ms"] / 1000)
+            if metrics["fallback_triggered"]:
+                fallback_counter.inc()
+
             # 7. LOG ANALYTICS (Structured JSON)
             analytics_logger.log_interaction(
                 session_id=session_id,

@@ -22,13 +22,14 @@ class ChatbotService:
     
     def initialize(self):
         """Initialize the chatbot pipeline (called once at startup)."""
+        
         if self._pipeline is None:
             logger.info("Initializing ChatbotPipeline...")
             try:
                 self._pipeline = ChatbotPipeline()
-                logger.info("✅ ChatbotPipeline initialized successfully")
+                logger.info("ChatbotPipeline initialized successfully")
             except Exception as e:
-                logger.critical(f"❌ Failed to initialize ChatbotPipeline: {e}")
+                logger.critical(f" Failed to initialize ChatbotPipeline: {e}")
                 raise RuntimeError(f"Chatbot initialization failed: {e}")
     
     def is_ready(self) -> bool:
@@ -38,38 +39,28 @@ class ChatbotService:
     @property
     def pipeline(self) -> ChatbotPipeline:
         """Direct access to pipeline for streaming."""
+
         if not self._pipeline:
             raise RuntimeError("Chatbot not initialized")
         return self._pipeline
     
-    def chat(
-        self,
-        session_id: str,
-        user_query: str,
-        top_k: int = 3
-    ) -> Dict[str, Any]:
-        """
-        Process a chat query.
-        
-        Args:
-            session_id: Unique session identifier
-            user_query: User's question
-            top_k: Number of chunks to retrieve
-            
-        Returns:
-            Response dict with answer, sources, and metadata
-            
-        Raises:
-            RuntimeError: If chatbot is not initialized
-        """
+    def chat(self, session_id: str, user_query: str, top_k: int = 3,
+             doc_id: str = None, provider: str = None, model: str = None) -> Dict[str, Any]:
         if not self.is_ready():
             raise RuntimeError("Chatbot not initialized")
-        
+        # If a different model is requested, swap the generator on the fly
+        if provider and model:
+            current = self._pipeline.generator
+            if current.provider != provider or current.model != model:
+                from inference.generator import GroundedGenerator
+                self._pipeline.generator = GroundedGenerator(provider=provider, model=model)
         return self._pipeline.chat(
             session_id=session_id,
             user_query=user_query,
-            top_k=top_k
+            top_k=top_k,
+            doc_id=doc_id
         )
+
     
     def clear_session(self, session_id: str) -> bool:
         """
@@ -81,6 +72,7 @@ class ChatbotService:
         Returns:
             True if successful
         """
+
         if not self.is_ready():
             return False
         
@@ -89,17 +81,17 @@ class ChatbotService:
                 del self._pipeline.memory._store[session_id]
                 return True
             return False
+
         except Exception as e:
             logger.error(f"Error clearing session {session_id}: {e}")
             return False
     
     def shutdown(self):
         """Cleanup resources on shutdown."""
+
         if self._pipeline:
             logger.info("Shutting down ChatbotPipeline...")
-            # Add any cleanup logic here if needed
             self._pipeline = None
 
 
-# Global chatbot service instance
 chatbot_service = ChatbotService()

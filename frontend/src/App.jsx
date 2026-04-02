@@ -32,8 +32,10 @@ export default function App() {
       title: docName ? `Chat: ${docName}` : 'New conversation',
       messages: [],
       createdAt: Date.now(),
-      docId,       // null = search all documents
-      docName,     // display name
+      docId,
+      docName,
+      provider: 'openai',
+      model: 'gpt-4o-mini',
     }
     setThreads(prev => [thread, ...prev])
     setActiveId(id)
@@ -80,6 +82,8 @@ export default function App() {
       sessionId: activeId,
       topK: 5,
       docId: thread?.docId || null,
+      provider: thread?.provider || 'openai',
+      model: thread?.model || 'gpt-4o-mini',
       onSources: (sources, conversational) => {
         updateThread(activeId, t => ({
           ...t,
@@ -106,9 +110,10 @@ export default function App() {
         setIsStreaming(false)
       },
       onError: (detail) => {
+        const msg = typeof detail === 'string' ? detail : JSON.stringify(detail)
         updateThread(activeId, t => ({
           ...t,
-          messages: t.messages.map(m => m.id === msgId ? { ...m, content: `⚠️ ${detail}`, streaming: false } : m)
+          messages: t.messages.map(m => m.id === msgId ? { ...m, content: `⚠️ ${msg}`, streaming: false } : m)
         }))
         setIsStreaming(false)
       }
@@ -120,6 +125,11 @@ export default function App() {
     setShowUpload(false)
     createThread(result.doc_id, result.filename)
   }, [createThread])
+
+  const handleModelChange = useCallback((provider, model) => {
+    if (!activeId) return
+    updateThread(activeId, t => ({ ...t, provider, model }))
+  }, [activeId, updateThread])
 
   return (
     <div className="app" data-sidebar={sidebarOpen}>
@@ -138,6 +148,7 @@ export default function App() {
         isStreaming={isStreaming}
         onSend={handleSend}
         onUploadClick={() => setShowUpload(true)}
+        onModelChange={handleModelChange}
       />
       {showUpload && (
         <UploadModal

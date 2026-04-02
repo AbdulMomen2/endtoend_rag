@@ -19,11 +19,12 @@ from api.routes import chat_router, health_router, ingest_router
 from api.services.chatbot import chatbot_service
 from api.services.cache import cache_service
 
-# Configure logging
+
 logging.basicConfig(
     level=getattr(logging, api_config.LOG_LEVEL),
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
+
 logger = logging.getLogger(__name__)
 
 
@@ -43,7 +44,7 @@ async def lifespan(app: FastAPI):
         # Initialize chatbot
         chatbot_service.initialize()
         
-        # Test cache
+        
         if cache_service.is_redis_available():
             logger.info("✅ Redis cache is available")
         else:
