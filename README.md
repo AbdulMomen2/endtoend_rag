@@ -29,6 +29,9 @@ Production-grade Retrieval-Augmented Generation (RAG) with hybrid retrieval, str
   <img src="architecture/Screenshot from 2026-04-02 09-30-08.png" width="45%" /><br/>
   <img src="architecture/Screenshot from 2026-04-02 09-30-28.png" width="45%" /><br/>
   <img src="architecture/Screenshot from 2026-04-02 09-31-06.png" width="45%" /><br/>
+  <img src="architecture/Screenshot from 2026-04-02 11-40-33.png" width="45%" /><br/>
+
+
   
   
 </p>
